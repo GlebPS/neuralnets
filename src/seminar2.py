@@ -13,7 +13,8 @@ def softmax(Z: np.array) -> np.array:
     :param Z: 2D array, shape (N, C)
     :return: softmax 2D array, shape (N, C)
     """
-    return Z
+    S = (np.exp(Z) / np.exp(Z).sum(axis=1).reshape(-1, 1))
+    return S
 
 
 def softmax_loss_and_grad(W: np.array, X: np.array, y: np.array, reg: float) -> tuple:
@@ -31,13 +32,19 @@ def softmax_loss_and_grad(W: np.array, X: np.array, y: np.array, reg: float) -> 
     dL_dW = np.zeros_like(W)
     # *****START OF YOUR CODE*****
     # 1. Forward pass, compute loss as sum of data loss and regularization loss [sum(W ** 2)]
-
+    N, D = X.shape
+    z = X @ W
+    s = softmax(z)
     # 2. Backward pass, compute intermediate dL/dZ
-
+    loss += -np.log(s[range(len(X)), y]).mean()
+    loss += reg * np.sum(W * W)
     # 3. Compute data gradient dL/dW
-
+    dLdz = s.copy()
+    dLdz[range(N), y] -= 1
     # 4. Compute regularization gradient
-
+    dL_dW += X.T @ dLdz
+    dL_dW /= N
+    dL_dW += reg * 2 * W
     # 5. Return loss and sum of data + reg gradients
 
     # *****END OF YOUR CODE*****
@@ -75,7 +82,7 @@ class SoftmaxClassifier:
         # Run stochastic gradient descent to optimize W
         loss_history = []
         for it in range(num_iters):
-            X_batch, y_batch = None, None
+            X_batch, Y_batch = None, None
             #########################################################################
             # TODO 3:                                                               #
             # Sample batch_size elements from the training data and their           #
@@ -88,11 +95,12 @@ class SoftmaxClassifier:
             # replacement is faster than sampling without replacement.              #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
+            batch_idx = np.random.choice(num_train, batch_size)
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
+            X_batch = X[batch_idx]
+            Y_batch = y[batch_idx]
             # evaluate loss and gradient
-            loss, grad = softmax_loss_and_grad(self.W, X_batch, y_batch, reg)
+            loss, grad = softmax_loss_and_grad(self.W, X_batch, Y_batch, reg)
             loss_history.append(loss)
 
             # perform parameter update
@@ -101,7 +109,7 @@ class SoftmaxClassifier:
             # Update the weights using the gradient and the learning rate.          #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
+            self.W -= grad * learning_rate
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
             if it % 100 == 0:
                 if verbose:
@@ -133,10 +141,10 @@ def train():
     # weights images must look like in lecture slides
 
     # ***** START OF YOUR CODE *****
-    learning_rate = 0
-    reg = 0
-    num_iters = 0
-    batch_size = 0
+    learning_rate = 1e-3
+    reg = 100
+    num_iters = 10000
+    batch_size = 64
     # ******* END OF YOUR CODE ************
 
     (x_train, y_train), (x_test, y_test) = get_preprocessed_data()
@@ -157,7 +165,7 @@ batch_size = {batch_size}
 Final loss: {loss_history[-1]}   
 Train accuracy: {cls.evaluate(x_train, y_train)}   
 Test accuracy: {cls.evaluate(x_test, y_test)}  
-    
+
 <img src="weights.png">  
 <br>
 <img src="loss.png">
