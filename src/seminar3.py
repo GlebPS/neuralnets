@@ -1,5 +1,9 @@
 """Seminar 3. Multilayer neural net"""
+import datetime
+import os
+
 import numpy as np
+from test_utils import get_preprocessed_data, visualize_weights, visualize_loss
 
 
 class Param:
@@ -37,7 +41,7 @@ def softmax_with_cross_entropy(Z, y):
 
 
 def l2_regularization(W, reg_strength):
-    loss = 0.5 * reg_strength * np.sum(W*W)
+    loss = 0.5 * reg_strength * np.sum(W * W)
     grad = np.dot(W, reg_strength)
     return loss, grad
 
@@ -54,7 +58,9 @@ class ReLULayer:
         :param X: input data
         :return: Rectified Linear Unit
         """
-        raise Exception("Not implemented!")
+        self.mask = X > 0
+        # raise Exception("Not implemented!")
+        return self.mask * X
 
     def backward(self, d_out: np.array) -> np.array:
         """
@@ -66,7 +72,8 @@ class ReLULayer:
           with respect to input
         """
         # TODO: Implement backward pass
-        raise Exception("Not implemented!")
+        # raise Exception("Not implemented!")
+        return self.mask * d_out
 
     def params(self) -> dict:
         # ReLU Doesn't have any parameters
@@ -82,7 +89,10 @@ class DenseLayer:
     def forward(self, X):
         # TODO: Implement forward pass
         # Your implementation shouldn't have any loops
-        raise Exception("Not implemented!")
+        # raise Exception("Not implemented!")
+        z = X @ self.W.value + self.B.value
+        self.X = X.copy()
+        return z
 
     def backward(self, d_out):
         """
@@ -106,7 +116,12 @@ class DenseLayer:
         # raise Exception("Not implemented!")
         # print('d_out shape is ', d_out.shape)
         # print('self.W shape is ', self.W.value.shape)
-        raise Exception("Not implemented!")
+        # raise Exception("Not implemented!")
+        batch_size, n_output = d_out.shape
+        self.W.grad = self.X.T @ d_out
+        self.B.grad = np.ones((1, batch_size)) @ d_out  # (1, batch_size) @ (batch_size, n_out)
+        self.B.grad = d_out.sum(axis=0, keepdims=True)
+        return d_out @ self.W.value.T
 
     def params(self):
         return {'W': self.W, 'B': self.B}
@@ -146,8 +161,9 @@ class TwoLayerNet:
         # Set layer parameters gradient to zeros
         # After that compute loss and gradients
         for layer in self.layers:
+            Z = layer.forward(Z)
             for param in layer.params().values():
-                pass
+                param.grad = np.zeros_like(param.grad)
 
         self.loss, self.d_out = softmax_with_cross_entropy(Z, y)
         return Z
@@ -161,9 +177,11 @@ class TwoLayerNet:
         for layer in reversed(self.layers):
             tmp_d_out = layer.backward(tmp_d_out)
             for param in layer.params().values():
-                pass
+                reg_loss, reg_grad = l2_regularization(param.value, self.reg)
+                self.loss += reg_loss
+                param.grad += reg_grad
 
-    def fit(self, X, y, learning_rate=1e-3, num_iters=10000,
+    def fit(self, X, y, learning_rate=1e-3, num_iters=18000,
             batch_size=4, verbose=True):
         """
         Train classifier with stochastic gradient descent
@@ -185,7 +203,7 @@ class TwoLayerNet:
         # Run stochastic gradient descent to optimize W
         loss_history = []
         for it in range(num_iters):
-            idxs = np.random.choice(num_classes, batch_size)
+            idxs = np.random.choice(len(X), batch_size)
             X_batch, y_batch = X[idxs], y[idxs]
             # evaluate loss and gradient
             self.forward(X_batch, y_batch)
@@ -203,10 +221,50 @@ class TwoLayerNet:
 
         return loss_history
 
+    def evaluate(self, X, y):
+        z = self.forward(X, y)
+        y_predicted = np.argmax(z, axis=1)
+        accuracy = np.mean(y_predicted == y)
+        return accuracy
+
 
 if __name__ == '__main__':
     """1 point"""
-    # Train your TwoLayer Net! 
+    # Train your TwoLayer Net!
     # Test accuracy must be > 0.33
     # Save report to output/seminar3
-    model = TwoLayerNet()
+    n_input, n_output, hidden = 3073, 10, 128
+    learning_rate = 1e-4
+    reg = 10
+    num_iters = 1000
+    batch_size = 64
+    (x_train, y_train), (x_test, y_test) = get_preprocessed_data()
+    cls = TwoLayerNet(n_input, n_output, hidden, reg=0.05)
+    t0 = datetime.datetime.now()
+    loss_history = cls.fit(x_train, y_train)
+    t1 = datetime.datetime.now()
+    dt = t1 - t0
+
+    report = f"""# Training
+datetime: {t1.isoformat(' ', 'seconds')}  
+Well done in: {dt.seconds} seconds  
+learning_rate = {learning_rate}  
+reg = {reg}  
+num_iters = {num_iters}  
+batch_size = {batch_size}  
+
+Final loss: {loss_history[-1]} 
+Train accuracy: {cls.evaluate(x_train, y_train)}   
+Test accuracy: {cls.evaluate(x_test, y_test)}    
+
+<br>
+<img src="loss.png">
+"""
+
+    print(report)
+
+    out_dir = 'output/seminar3'
+    report_path = os.path.join(out_dir, 'report.md')
+    with open(report_path, 'w') as f:
+        f.write(report)
+    visualize_loss(loss_history, out_dir)
